@@ -1,0 +1,48 @@
+# Full local demo: Switchyard + Postgres + mock vendor systems + a mock OIDC identity provider.
+#   docker compose up --build      then open http://localhost:8000
+# Sign in through the demo IdP (it stands in for Entra ID / Okta); pick any user.
+services:
+  app:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      ENVIRONMENT: development
+      PUBLIC_URL: http://localhost:8000
+      SECRET_KEY: change-me-local-demo-only-0123456789abcdef
+      DATABASE_URL: postgresql+psycopg://switchyard:switchyard@db:5432/switchyard
+      AUTH_MODE: oidc
+      OIDC_PROVIDER_NAME: Demo IdP
+      OIDC_DISCOVERY_URL: http://mock:9100/idp/.well-known/openid-configuration
+      OIDC_CLIENT_ID: switchyard
+      OIDC_CLIENT_SECRET: demo-oidc-secret
+      OIDC_GROUPS_CLAIM: groups
+      SEED_DEMO: "true"
+      DEMO_MCP_URL: http://mock:9100
+    depends_on:
+      db: { condition: service_healthy }
+      mock: { condition: service_started }
+
+  mock:
+    build: .
+    working_dir: /app/mock
+    command: ["uvicorn", "mock_servers:app", "--host", "0.0.0.0", "--port", "9100"]
+    ports: ["9100:9100"]
+    environment:
+      MOCK_PUBLIC_URL: http://localhost:9100   # what your browser uses
+      MOCK_INTERNAL_URL: http://mock:9100      # what the app container uses
+      MOCK_REDIRECT_PREFIXES: http://localhost:8000/
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: switchyard
+      POSTGRES_PASSWORD: switchyard
+      POSTGRES_DB: switchyard
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U switchyard"]
+      interval: 3s
+      retries: 20
+
+volumes:
+  pgdata:
