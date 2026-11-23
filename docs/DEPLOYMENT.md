@@ -4,6 +4,13 @@ Switchyard ships as **one container image** (UI + API) plus a **Postgres databas
 inside the client's cloud tenant where possible — it keeps credentials, data and audit logs in their boundary and
 makes security review much shorter.
 
+## Getting the image
+
+Every push to `main` publishes `ghcr.io/rumaani/switchyard:latest` (and `:vX.Y.Z` for tags) via
+`.github/workflows/release.yml`. Pull it from any container host, or build locally with `docker build -t switchyard .`.
+If the package is private, make it public under GitHub → Packages → switchyard → Package settings, or give the host
+a read-only token.
+
 ## Required settings
 
 | Variable | Production value |
