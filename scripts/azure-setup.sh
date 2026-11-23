@@ -50,12 +50,25 @@ az group create -n "$RG" -l "$LOCATION" -o none
 
 # ---------------------------------------------------------------- PostgreSQL
 if ! az postgres flexible-server show -g "$RG" -n "$PG" -o none 2>/dev/null; then
-  say "PostgreSQL flexible server $PG (Burstable B1ms, 32 GB) — takes ~5 minutes"
   PG_PASS="Sy-$(openssl rand -hex 16)"
-  az postgres flexible-server create -g "$RG" -n "$PG" -l "$LOCATION" \
-    --tier Burstable --sku-name Standard_B1ms --storage-size 32 --storage-auto-grow Disabled \
-    --version 16 --admin-user syadmin --admin-password "$PG_PASS" \
-    --public-access 0.0.0.0 --yes -o none   # 0.0.0.0 = allow Azure services only
+  # New/free subscriptions are often blocked from creating PostgreSQL in busy regions
+  # ("The location is restricted from performing this operation"), so try nearby regions in turn.
+  PG_CREATED=""
+  for PG_LOC in ${PG_LOCATIONS:-$LOCATION eastus2 centralus westus2 westus3 northcentralus southcentralus canadacentral}; do
+    say "PostgreSQL flexible server $PG in $PG_LOC (Burstable B1ms, 32 GB) — takes ~5 minutes"
+    if OUT=$(az postgres flexible-server create -g "$RG" -n "$PG" -l "$PG_LOC" \
+        --tier Burstable --sku-name Standard_B1ms --storage-size 32 --storage-auto-grow Disabled \
+        --version 16 --admin-user syadmin --admin-password "$PG_PASS" \
+        --public-access 0.0.0.0 --yes -o none 2>&1); then   # 0.0.0.0 = allow Azure services only
+      PG_CREATED=1; break
+    fi
+    if grep -qiE "restricted|not available|capacity|quota|NoRegisteredProviderFound|SkuNotAvailable" <<<"$OUT"; then
+      echo "   $PG_LOC is not available for this subscription — trying the next region"
+      continue
+    fi
+    echo "$OUT" >&2; exit 1
+  done
+  [[ -n "$PG_CREATED" ]] || { echo "No region accepted the PostgreSQL server. Re-run with PG_LOCATIONS=\"<region> ...\"" >&2; exit 1; }
   az postgres flexible-server db create -g "$RG" -s "$PG" -d switchyard -o none
   NEW_DB_URL="postgresql+psycopg://syadmin:${PG_PASS}@${PG}.postgres.database.azure.com:5432/switchyard?sslmode=require"
 elif [[ "$RESET_SECRETS" == "1" ]]; then
