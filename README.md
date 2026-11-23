@@ -1,5 +1,8 @@
 # Switchyard
 
+[![CI](https://github.com/rumaani/switchyard/actions/workflows/ci.yml/badge.svg)](https://github.com/rumaani/switchyard/actions/workflows/ci.yml)
+[![Deploy to Azure](https://github.com/rumaani/switchyard/actions/workflows/deploy-azure.yml/badge.svg)](https://github.com/rumaani/switchyard/actions/workflows/deploy-azure.yml)
+
 **Route work between your vendors' MCP tools — with SSO, roles, approvals and an audit trail.**
 
 Switchyard is a small, self-hosted control plane you drop into a client environment to:
