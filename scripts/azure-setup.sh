@@ -202,6 +202,21 @@ if [[ -z "$DEPLOY_APP_ID" ]]; then
     \"audiences\": [\"api://AzureADTokenExchange\"]}" -o none
   sleep 20  # let the service principal replicate before the role assignment
 fi
+# GitHub may present the repo either by name or by immutable numeric ids
+# (repo:<owner>@<owner_id>/<repo>@<repo_id>:...). Register the id-based subject too.
+GH_IDS=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}" 2>/dev/null \
+  | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d["owner"]["login"],d["owner"]["id"],d["name"],d["id"])' 2>/dev/null || true)
+if [[ -n "$GH_IDS" ]]; then
+  read -r GH_OWNER GH_OWNER_ID GH_NAME GH_REPO_ID <<<"$GH_IDS"
+  ID_SUBJECT="repo:${GH_OWNER}@${GH_OWNER_ID}/${GH_NAME}@${GH_REPO_ID}:environment:production"
+  if ! az ad app federated-credential list --id "$DEPLOY_APP_ID" --query "[?subject=='$ID_SUBJECT']" -o tsv | grep -q .; then
+    az ad app federated-credential create --id "$DEPLOY_APP_ID" --parameters "{
+      \"name\": \"github-production-ids\",
+      \"issuer\": \"https://token.actions.githubusercontent.com\",
+      \"subject\": \"$ID_SUBJECT\",
+      \"audiences\": [\"api://AzureADTokenExchange\"]}" -o none
+  fi
+fi
 az role assignment create --assignee "$DEPLOY_APP_ID" --role Contributor \
   --scope "/subscriptions/$SUB_ID/resourceGroups/$RG" -o none 2>/dev/null || true
 
