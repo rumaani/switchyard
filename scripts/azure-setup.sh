@@ -35,6 +35,16 @@ RESET_SECRETS="${RESET_SECRETS:-0}"
 
 say() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 
+ensure_database() {
+  if az postgres flexible-server db show -g "$RG" --server-name "$PG" --database-name switchyard -o none 2>/dev/null \
+     || az postgres flexible-server db show -g "$RG" --server-name "$PG" --name switchyard -o none 2>/dev/null; then
+    return 0
+  fi
+  az postgres flexible-server db create -g "$RG" --server-name "$PG" --name switchyard -o none 2>/dev/null \
+    || az postgres flexible-server db create -g "$RG" --server-name "$PG" --database-name switchyard -o none
+}
+db_url() { echo "postgresql+psycopg://syadmin:${1}@${PG}.postgres.database.azure.com:5432/switchyard?sslmode=require"; }
+
 SUB_ID=$(az account show --query id -o tsv)
 TENANT_ID=$(az account show --query tenantId -o tsv)
 say "Subscription $SUB_ID · tenant $TENANT_ID · region $LOCATION"
@@ -69,14 +79,18 @@ if ! az postgres flexible-server show -g "$RG" -n "$PG" -o none 2>/dev/null; the
     echo "$OUT" >&2; exit 1
   done
   [[ -n "$PG_CREATED" ]] || { echo "No region accepted the PostgreSQL server. Re-run with PG_LOCATIONS=\"<region> ...\"" >&2; exit 1; }
-  az postgres flexible-server db create -g "$RG" -s "$PG" -d switchyard -o none
-  NEW_DB_URL="postgresql+psycopg://syadmin:${PG_PASS}@${PG}.postgres.database.azure.com:5432/switchyard?sslmode=require"
-elif [[ "$RESET_SECRETS" == "1" ]]; then
+  ensure_database
+  NEW_DB_URL=$(db_url "$PG_PASS")
+elif [[ "$RESET_SECRETS" == "1" ]] || ! az containerapp secret show -g "$RG" -n "$APP" --secret-name db-url -o none 2>/dev/null; then
+  # Server exists but the app doesn't know its password yet (e.g. an earlier run stopped part-way): set a new one.
+  say "PostgreSQL $PG exists — setting a fresh admin password for the app"
   PG_PASS="Sy-$(openssl rand -hex 16)"
   az postgres flexible-server update -g "$RG" -n "$PG" --admin-password "$PG_PASS" -o none
-  NEW_DB_URL="postgresql+psycopg://syadmin:${PG_PASS}@${PG}.postgres.database.azure.com:5432/switchyard?sslmode=require"
+  ensure_database
+  NEW_DB_URL=$(db_url "$PG_PASS")
 else
-  say "PostgreSQL $PG exists — keeping its password"
+  say "PostgreSQL $PG exists and the app is configured — keeping its password"
+  ensure_database
   NEW_DB_URL=""
 fi
 
