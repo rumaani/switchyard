@@ -25,7 +25,31 @@ a read-only token.
 
 **Run exactly one replica** in v0.1 (workflow runs execute in-process; see ARCHITECTURE.md).
 
-## Option A — Azure Container Apps (best fit when the client is on Entra ID)
+## Your own demo site on Azure (automated, ~free)
+
+Uses the Azure free account: Container Apps' monthly free grant (both apps scale to zero) and 12 months of free
+PostgreSQL Flexible Server B1ms with 32 GB storage. Sign-in is real Entra ID using app roles.
+
+1. **Make the image public:** GitHub → Packages → switchyard → Package settings → Change visibility → Public.
+2. **Run the setup once** in Azure Cloud Shell (Bash) at https://shell.azure.com:
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/rumaani/switchyard/main/scripts/azure-setup.sh
+   ADMIN_EMAIL=you@example.com bash azure-setup.sh
+   ```
+   About 10 minutes. It prints the site address and four values.
+3. **Add the four values** as repository variables (Settings → Secrets and variables → Actions → Variables):
+   `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`.
+4. From then on, every push to `main` → CI → image published → **Deploy to Azure** rolls both apps to that image
+   and checks `/readyz`. Run it by hand any time from Actions → Deploy to Azure → Run workflow.
+
+Give a colleague access: Entra ID → Enterprise applications → “Switchyard (switchyard)” → Users and groups →
+Add assignment → pick one of the `sy-*` roles (they map to admin / builder / operator / viewer / auditor).
+
+Cost guard-rails: keep `--max-replicas 1`, leave PostgreSQL storage at 32 GB with auto-grow off, and set a
+budget alert on the resource group (Cost Management → Budgets). After the free year, PostgreSQL B1ms is the main
+cost; delete the resource group to stop everything: `az group delete -n rg-switchyard`.
+
+## Option A — Azure Container Apps for a client (best fit when the client is on Entra ID)
 
 ```bash
 RG=rg-switchyard; LOC=eastus; ACR=<registry>; APP=switchyard

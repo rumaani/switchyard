@@ -1,0 +1,60 @@
+name: Deploy to Azure
+# Runs after "Publish image" succeeds on main and rolls the Container Apps to that exact image.
+# Needs one-time setup: scripts/azure-setup.sh, then repository variables AZURE_CLIENT_ID,
+# AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP. Until they exist this workflow skips.
+on:
+  workflow_run:
+    workflows: ["Publish image"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC federation with Entra ID — no Azure password stored in GitHub
+  contents: read
+
+concurrency:
+  group: deploy-azure
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      vars.AZURE_CLIENT_ID != '' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.url.outputs.site }}
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Pick image tag
+        id: tag
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "image=ghcr.io/${{ github.repository_owner }}/switchyard:sha-${SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Roll out
+        run: |
+          az extension add -n containerapp --upgrade -y >/dev/null 2>&1 || true
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          for app in switchyard-mock switchyard; do
+            az containerapp update -g "$RG" -n "$app" --image "${{ steps.tag.outputs.image }}" -o none
+          done
+
+      - name: Smoke test
+        id: url
+        run: |
+          FQDN=$(az containerapp show -g "${{ vars.AZURE_RESOURCE_GROUP }}" -n switchyard \
+                 --query properties.configuration.ingress.fqdn -o tsv)
+          echo "site=https://$FQDN" >> "$GITHUB_OUTPUT"
+          for i in $(seq 1 30); do   # scale-from-zero + new revision can take a minute
+            if curl -fsS "https://$FQDN/readyz"; then echo; exit 0; fi
+            sleep 6
+          done
+          echo "Site did not become ready" >&2; exit 1

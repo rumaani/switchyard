@@ -24,10 +24,9 @@ services:
 
   mock:
     build: .
-    working_dir: /app/mock
-    command: ["uvicorn", "mock_servers:app", "--host", "0.0.0.0", "--port", "9100"]
     ports: ["9100:9100"]
     environment:
+      SWITCHYARD_ROLE: mock
       MOCK_PUBLIC_URL: http://localhost:9100   # what your browser uses
       MOCK_INTERNAL_URL: http://mock:9100      # what the app container uses
       MOCK_REDIRECT_PREFIXES: http://localhost:8000/

@@ -16,9 +16,10 @@ RUN pip install -r requirements.txt
 COPY backend/app ./app
 COPY mock ./mock
 COPY --from=ui /ui/dist ./static
+COPY docker-start.sh /app/docker-start.sh
 RUN useradd --uid 10001 --create-home switchyard && mkdir -p /data && chown switchyard /data
 USER switchyard
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz')"
-# Behind a TLS-terminating load balancer; trust its X-Forwarded-* headers.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# App by default (behind a TLS-terminating proxy); SWITCHYARD_ROLE=mock runs the demo vendor servers.
+CMD ["sh", "/app/docker-start.sh"]

@@ -154,7 +154,7 @@ async def logout(request: Request, db: Session = Depends(get_db)):
             if end:
                 from urllib.parse import urlencode
 
-                params = {"id_token_hint": id_token, "post_logout_redirect_uri": s.public_url}
+                params = {"id_token_hint": id_token, "post_logout_redirect_uri": s.public_url.rstrip("/") + "/"}
                 logout_url = end + "?" + urlencode(params)
         except Exception:  # noqa: BLE001
             log.warning("could not build IdP logout URL", exc_info=True)

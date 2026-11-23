@@ -31,3 +31,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t switchyard:ci .
+      - name: Smoke test both container roles
+        run: |
+          docker run -d --name app -p 8000:8000 switchyard:ci
+          docker run -d --name mock -p 9100:9100 -e SWITCHYARD_ROLE=mock switchyard:ci
+          for i in $(seq 1 30); do curl -fsS localhost:8000/readyz && curl -fsS localhost:9100/healthz && exit 0; sleep 2; done
+          docker logs app; docker logs mock; exit 1
