@@ -49,6 +49,15 @@ Cost guard-rails: keep `--max-replicas 1`, leave PostgreSQL storage at 32 GB wit
 budget alert on the resource group (Cost Management → Budgets). After the free year, PostgreSQL B1ms is the main
 cost; delete the resource group to stop everything: `az group delete -n rg-switchyard`.
 
+### Troubleshooting the demo setup
+
+- **“The location is restricted from performing this operation”** on PostgreSQL: new subscriptions are often
+  blocked in busy regions. The script tries several US regions; override with `PG_LOCATIONS="westus3 canadacentral"`.
+- **Deploy fails at `azure/login` with `AADSTS700213 … No matching federated identity record`**: GitHub presented
+  the repo by numeric ids (`repo:<owner>@<id>/<repo>@<id>:environment:production`). Re-run the setup script (it
+  registers both subject forms), or add that exact subject as a federated credential on “Switchyard GitHub deploy”.
+- **Site shows the Azure placeholder page**: the configure step didn't finish — re-run the script; it is idempotent.
+
 ## Option A — Azure Container Apps for a client (best fit when the client is on Entra ID)
 
 ```bash
